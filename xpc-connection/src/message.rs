@@ -18,8 +18,7 @@ use xpc_connection_sys::{
     xpc_connection_t, xpc_data_create, xpc_data_get_bytes_ptr, xpc_data_get_length,
     xpc_dictionary_apply, xpc_dictionary_create, xpc_dictionary_get_count,
     xpc_dictionary_set_value, xpc_get_type, xpc_int64_create, xpc_int64_get_value, xpc_object_t,
-    xpc_release, xpc_retain, xpc_string_create, xpc_string_get_string_ptr, xpc_uuid_create,
-    xpc_uuid_get_bytes,
+    xpc_release, xpc_string_create, xpc_string_get_string_ptr, xpc_uuid_create, xpc_uuid_get_bytes,
 };
 
 use crate::{XpcClient, XpcListener};
@@ -92,14 +91,11 @@ unsafe fn copy_raw_to_vec(ptr: *const u8, length: usize) -> Vec<u8> {
 
 #[derive(Debug)]
 pub enum Message {
-<<<<<<< HEAD
-=======
     Client(XpcClient),
     Listener(XpcListener),
     Int64(i64),
     String(CString),
     Dictionary(HashMap<CString, Message>),
->>>>>>> a18c3ce (Add support for XpcListener)
     Array(Vec<Message>),
     Bool(bool),
     Data(Vec<u8>),
@@ -125,23 +121,13 @@ pub fn xpc_object_to_message(xpc_object: xpc_object_t) -> Message {
     match xpc_object_to_xpctype(xpc_object).0 {
         XpcType::Connection => {
             let connection = xpc_object as xpc_connection_t;
-            unsafe { xpc_retain(connection as xpc_object_t) };
             let xpc_connection = XpcClient::from_raw(connection);
             Message::Client(xpc_connection)
         }
         XpcType::Int64 => Message::Int64(unsafe { xpc_int64_get_value(xpc_object) }),
-<<<<<<< HEAD
-        XpcType::Uint64 => Message::Uint64(unsafe { xpc_uint64_get_value(xpc_object) }),
-        XpcType::Bool => Message::Bool(unsafe { xpc_bool_get_value(xpc_object) }),
-        XpcType::Fd => Message::Fd(unsafe { xpc_fd_dup(xpc_object) }),
-        XpcType::String => Message::String(cstring_to_string(unsafe {
-            xpc_string_get_string_ptr(xpc_object)
-        })),
-=======
         XpcType::String => Message::String(
             unsafe { CStr::from_ptr(xpc_string_get_string_ptr(xpc_object)) }.to_owned(),
         ),
->>>>>>> a18c3ce (Add support for XpcListener)
         XpcType::Dictionary => {
             let (sender, receiver) = channel();
             let mut rc_block = ConcreteBlock::new(move |key, value| {
@@ -209,21 +195,10 @@ pub fn xpc_object_to_message(xpc_object: xpc_object_t) -> Message {
 
 pub fn message_to_xpc_object(message: Message) -> xpc_object_t {
     match message {
-        Message::Client(client) => client.connection as xpc_object_t,
-        Message::Listener(listener) => listener.connection as xpc_object_t,
+        Message::Client(xpc_connection) => xpc_connection.connection.0 as xpc_object_t,
+        Message::Listener(xpc_connection) => xpc_connection.connection.0 as xpc_object_t,
         Message::Int64(value) => unsafe { xpc_int64_create(value) },
-<<<<<<< HEAD
-        Message::Uint64(value) => unsafe { xpc_uint64_create(value) },
-        Message::Bool(value) => unsafe { xpc_bool_create(value) },
-        Message::Fd(value) => unsafe { xpc_fd_create(value) },
-        Message::String(value) => unsafe {
-            let cstr = CStr::from_bytes_with_nul(value.as_bytes()).unwrap();
-            let cstr_ptr = cstr.as_ptr();
-            xpc_string_create(cstr_ptr)
-        },
-=======
         Message::String(value) => unsafe { xpc_string_create(value.as_ptr()) },
->>>>>>> a18c3ce (Add support for XpcListener)
         Message::Dictionary(values) => {
             let dictionary = unsafe {
                 xpc_dictionary_create(ptr::null(), ptr::null_mut() as *mut *mut c_void, 0)
