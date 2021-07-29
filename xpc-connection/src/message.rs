@@ -1,3 +1,5 @@
+use block::{Block, ConcreteBlock};
+use libc::c_int;
 use std::{
     collections::HashMap,
     ffi::CStr,
@@ -7,17 +9,17 @@ use std::{
     sync::mpsc::channel,
 };
 
-use block::{Block, ConcreteBlock};
-
 use xpc_connection_sys::{
     _xpc_type_activity, _xpc_type_array, _xpc_type_bool, _xpc_type_connection, _xpc_type_data,
     _xpc_type_date, _xpc_type_dictionary, _xpc_type_double, _xpc_type_endpoint, _xpc_type_error,
     _xpc_type_fd, _xpc_type_int64, _xpc_type_null, _xpc_type_shmem, _xpc_type_string,
     _xpc_type_uint64, _xpc_type_uuid, uuid_t, xpc_array_append_value, xpc_array_apply,
-    xpc_array_create, xpc_array_get_count, xpc_data_create, xpc_data_get_bytes_ptr,
-    xpc_data_get_length, xpc_dictionary_apply, xpc_dictionary_create, xpc_dictionary_get_count,
-    xpc_dictionary_set_value, xpc_get_type, xpc_int64_create, xpc_int64_get_value, xpc_object_t,
-    xpc_release, xpc_string_create, xpc_string_get_string_ptr, xpc_uuid_create, xpc_uuid_get_bytes,
+    xpc_array_create, xpc_array_get_count, xpc_bool_create, xpc_bool_get_value, xpc_data_create,
+    xpc_data_get_bytes_ptr, xpc_data_get_length, xpc_dictionary_apply, xpc_dictionary_create,
+    xpc_dictionary_get_count, xpc_dictionary_set_value, xpc_fd_create, xpc_fd_dup, xpc_get_type,
+    xpc_int64_create, xpc_int64_get_value, xpc_object_t, xpc_release, xpc_string_create,
+    xpc_string_get_string_ptr, xpc_uint64_create, xpc_uint64_get_value, xpc_uuid_create,
+    xpc_uuid_get_bytes,
 };
 
 #[derive(Debug, Clone)]
@@ -88,13 +90,16 @@ unsafe fn copy_raw_to_vec(ptr: *const u8, length: usize) -> Vec<u8> {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    Array(Vec<Message>),
+    Bool(bool),
+    Data(Vec<u8>),
+    Dictionary(HashMap<String, Message>),
+    Error(MessageError),
+    Fd(c_int),
     Int64(i64),
     String(String),
-    Dictionary(HashMap<String, Message>),
-    Array(Vec<Message>),
-    Data(Vec<u8>),
+    Uint64(u64),
     Uuid(Vec<u8>),
-    Error(MessageError),
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +112,9 @@ pub enum MessageError {
 pub fn xpc_object_to_message(xpc_object: xpc_object_t) -> Message {
     match xpc_object_to_xpctype(xpc_object).0 {
         XpcType::Int64 => Message::Int64(unsafe { xpc_int64_get_value(xpc_object) }),
+        XpcType::Uint64 => Message::Uint64(unsafe { xpc_uint64_get_value(xpc_object) }),
+        XpcType::Bool => Message::Bool(unsafe { xpc_bool_get_value(xpc_object) }),
+        XpcType::Fd => Message::Fd(unsafe { xpc_fd_dup(xpc_object) }),
         XpcType::String => Message::String(cstring_to_string(unsafe {
             xpc_string_get_string_ptr(xpc_object)
         })),
@@ -176,6 +184,9 @@ pub fn xpc_object_to_message(xpc_object: xpc_object_t) -> Message {
 pub fn message_to_xpc_object(message: Message) -> xpc_object_t {
     match message {
         Message::Int64(value) => unsafe { xpc_int64_create(value) },
+        Message::Uint64(value) => unsafe { xpc_uint64_create(value) },
+        Message::Bool(value) => unsafe { xpc_bool_create(value) },
+        Message::Fd(value) => unsafe { xpc_fd_create(value) },
         Message::String(value) => unsafe {
             let cstr = CStr::from_bytes_with_nul(value.as_bytes()).unwrap();
             let cstr_ptr = cstr.as_ptr();
